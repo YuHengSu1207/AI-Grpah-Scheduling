@@ -24,8 +24,11 @@ def malloc(tensorName:str, tensorSize:int, memoryTable:list)->tuple([int,list]):
         return 0, memoryTable
 
 def free(tensorName:str,  memoryTable:list)->list:
+    # add finding assert
+    find_tensor = False
     for cnt in range(len(memoryTable)):
         if memoryTable[cnt]['tensor'] == tensorName:
+            find_tensor = True
             block =  memoryTable[cnt]
             if cnt > 0 and cnt < (len(memoryTable) - 1): # 1 ~ (n-1)
                 if memoryTable[cnt + 1]['valid'] == 0 and memoryTable[cnt - 1]['valid'] == 0:  # merge [cnt-1 cnt cnt+1] block
@@ -58,6 +61,11 @@ def free(tensorName:str,  memoryTable:list)->list:
                     memoryTable[cnt]['valid'] = 0
                     memoryTable[cnt]['tensor'] = ""
             break
+        
+    if not find_tensor:
+        print(f"No found : {tensorName}")
+        raise "Invalid free"
+    
     return memoryTable
 
 

@@ -1,10 +1,7 @@
 from . import *
 
-def analysis(model:onnx.ModelProto,layout:str, node:onnx.NodeProto, memoryTable:Optional[list] = None, csvPath:Optional[str] = None, pervious_cycle:Optional[int] = 0) -> tuple([int, dict,list]):
-    return analysis_scalar_memory_dependent(model,layout,node, memoryTable, csvPath, pervious_cycle)
-    # return analysis_matrix_memory_reallocated(model,layout,node)
-
-def analysis_scalar_memory_dependent(model:onnx.ModelProto,layout:str, node:onnx.NodeProto, memoryTable:Optional[list] = None, csvPath:Optional[str] = None, pervious_cycle:Optional[int] = 0) -> tuple([int, dict,list]):
+def analysis(model:onnx.ModelProto,layout:str, node:onnx.NodeProto, memoryTable:Optional[list] = None, 
+            csvPath:Optional[str] = None, pervious_cycle:Optional[int] = 0, use_count: dict = None) -> tuple([int, dict,list]):
     memoryRequest = 0
     _, X = get_value_info(node.input[0], model)
     
@@ -96,9 +93,14 @@ def analysis_scalar_memory_dependent(model:onnx.ModelProto,layout:str, node:onnx
     request, memoryTable = tool.malloc(node.output[0], staticMemY // 8 , memoryTable)
     memoryRequest += request
     tool.dump_csv(csvPath=csvPath, memoryTable=memoryTable, memMAX=config.MEMORY_SIZE, second=cycle + pervious_cycle)
-    # for ipt in node.input:
-    #     memoryTable = tool.free(ipt, memoryTable)
-    memoryTable = tool.free(node.input[0], memoryTable)
+
+    # After using inputs
+    for input_name in node.input:
+        if use_count is not None:
+            use_count[input_name] -= 1
+            if use_count[input_name] == 0:
+                memoryTable = tool.free(input_name, memoryTable)
+        
     ######### memory Management #########
     return memoryRequest, {"memory" : memory / 8192, "cycle":int(cycle)}, memoryTable
     
