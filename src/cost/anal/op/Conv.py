@@ -1,10 +1,10 @@
 from . import *
 
-def analysis(model:onnx.ModelProto,layout:str, node:onnx.NodeProto, memoryTable:Optional[list] = None, csvPath:Optional[str] = None) -> tuple([int, dict,list]):
-    return analysis_scalar_memory_dependent(model,layout,node, memoryTable, csvPath)
+def analysis(model:onnx.ModelProto,layout:str, node:onnx.NodeProto, memoryTable:Optional[list] = None, csvPath:Optional[str] = None, pervious_cycle:Optional[int] = 0) -> tuple([int, dict,list]):
+    return analysis_scalar_memory_dependent(model,layout,node, memoryTable, csvPath, pervious_cycle)
     # return analysis_matrix_memory_reallocated(model,layout,node)
 
-def analysis_scalar_memory_dependent(model:onnx.ModelProto,layout:str, node:onnx.NodeProto, memoryTable:Optional[list] = None, csvPath:Optional[str] = None) -> tuple([int, dict,list]):
+def analysis_scalar_memory_dependent(model:onnx.ModelProto,layout:str, node:onnx.NodeProto, memoryTable:Optional[list] = None, csvPath:Optional[str] = None, pervious_cycle:Optional[int] = 0) -> tuple([int, dict,list]):
     memoryRequest = 0
     _, X = get_value_info(node.input[0], model)
     
@@ -13,6 +13,7 @@ def analysis_scalar_memory_dependent(model:onnx.ModelProto,layout:str, node:onnx
     
     if len(node.input) == 3:
         _, B = get_initilizer(node.input[2], model)
+        # print(B.dims[0])
     
     dimX = [a.dim_value for a in X.type.tensor_type.shape.dim]
     dimY = [a.dim_value for a in Y.type.tensor_type.shape.dim]
@@ -33,12 +34,45 @@ def analysis_scalar_memory_dependent(model:onnx.ModelProto,layout:str, node:onnx
     for dim in dimY: staticMemY *= dim
     for dim in dimW: staticMemW *= dim
 
-    loop = dimY[0] * dimY[1] * dimY[2] * dimY[3] * dimW[1] * dimW[2] * dimW[3] 
+    # Extract stride, padding, dilation from attributes
+    stride = [1, 1]
+    padding = [0, 0, 0, 0]  # [pad_top, pad_left, pad_bottom, pad_right]
+    dilation = [1, 1]
+
+    for attr in node.attribute:
+        if attr.name == "strides":
+            stride = list(attr.ints)
+        elif attr.name == "pads":
+            padding = list(attr.ints)
+        elif attr.name == "dilations":
+            dilation = list(attr.ints)
+
+    stride_h, stride_w = stride
+    dilation_h, dilation_w = dilation
+    pad_top, pad_left, pad_bottom, pad_right = padding
     
-    # SW instruction :
-    store = dimY[0] * dimY[1] * dimY[2] * dimY[3]
+    # Kernel size
+    k_cout, k_cin, k_h, k_w = dimW
+
+    # Input size
+    n, c_in, h_in, w_in = dimX
+    n_out, c_out, h_out, w_out = dimY
+
+    # Total output elements = store count
+    store = n_out * c_out * h_out * w_out
+    
     # LW instruction :
-    load = loop
+    # Recalculate the number of input loads
+    load = 0
+    for h in range(h_out):
+        for w in range(w_out):
+            for kh in range(k_h):
+                for kw in range(k_w):
+                    h_in_idx = h * stride_h - pad_top + kh * dilation_h
+                    w_in_idx = w * stride_w - pad_left + kw * dilation_w
+                    if 0 <= h_in_idx < h_in and 0 <= w_in_idx < w_in:
+                        load += n * c_in * c_out  # one load per input-channel × batch × output-channel
+                        
     # Create Address for input kernel output
     create_input_pivot = 3 + 2 # 3 (multiply) + 2 (addition) 
     create_kernel_address =  3 + 3 # 3 (multiply) + 3 (addition)
@@ -50,7 +84,7 @@ def analysis_scalar_memory_dependent(model:onnx.ModelProto,layout:str, node:onnx
     # Create Kernel
     create_kernel = (config.DATA_LATENCY + create_kernel_address) * load
     # Create Output
-    create_output = (config.DATA_LATENCY + create_output_address) * store + create_temp * loop
+    create_output = (config.DATA_LATENCY + create_output_address) * store + create_temp * store * k_cin * k_h * k_w
     # Number of branch
     branch_count = 0
     # CPU instruction count :
@@ -58,11 +92,10 @@ def analysis_scalar_memory_dependent(model:onnx.ModelProto,layout:str, node:onnx
     # Memory Requirement
     memory = staticMemX + staticMemY + staticMemW
     
-
     ######### memory Management #########
     request, memoryTable = tool.malloc(node.output[0], staticMemY // 8 , memoryTable)
     memoryRequest += request
-    tool.dump_csv(csvPath=csvPath, memoryTable=memoryTable, memMAX=config.MEMORY_SIZE_IN_LAB16_3+1, second=cycle)
+    tool.dump_csv(csvPath=csvPath, memoryTable=memoryTable, memMAX=config.MEMORY_SIZE, second=cycle + pervious_cycle)
     # for ipt in node.input:
     #     memoryTable = tool.free(ipt, memoryTable)
     memoryTable = tool.free(node.input[0], memoryTable)

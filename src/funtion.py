@@ -70,7 +70,7 @@ def cost(args, parser):
     modelname = os.path.basename(dirPath)
     if not os.path.isdir("out/"+modelname):
         os.makedirs("out/"+modelname)
-    memoryTable = [{"valid":0, "address":0, "size":config.MEMORY_SIZE_IN_LAB16_3, "tensor":""}]
+    memoryTable = [{"valid":0, "address":0, "size":config.MEMORY_SIZE, "tensor":""}]
     csvPath = "out/"+modelname+"/memory.csv"
     if os.path.isfile(csvPath):
         os.remove(csvPath)

@@ -28,14 +28,21 @@ def costFunction(model:onnx.ModelProto,layout:str,  memoryTable:Optional[list] =
     _ = tool.dump_csv(csvPath, memoryTable, config.MEMORY_SIZE, 0)
     nodes = [node for node in model.graph.node]
     for node in nodes:
+        # print(f" ======== begin of node {node.name} ========")
+        # print(f"memory table : {memoryTable} and cycle {cycle}")
         _, table ,memoryTable = anal.analyticalModel(
             model=model,
             layout=layout,
             node=node,
             memoryTable=memoryTable,
-            csvPath=csvPath
+            csvPath=csvPath,
+            previous_cycle=cycle
             )
         cycle += table['cycle']
+        
+        # print(f"memory table : {memoryTable} and cycle {cycle}")
+        # print(f" ======== end of node {node.name} ========")
+        
         # memoryRequest += request
     _ = tool.dump_csv(csvPath, memoryTable, config.MEMORY_SIZE, 0)
     return cycle

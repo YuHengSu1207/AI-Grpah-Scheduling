@@ -1,6 +1,6 @@
 from . import *
 
-def analysis(model:onnx.ModelProto,layout:str, node:onnx.NodeProto, memoryTable:Optional[list] = None, csvPath:Optional[str] = None) -> tuple([int, dict,list]):
+def analysis(model:onnx.ModelProto,layout:str, node:onnx.NodeProto, memoryTable:Optional[list] = None, csvPath:Optional[str] = None, pervious_cycle:Optional[int] = 0) -> tuple([int, dict,list]):
     memory = 0
     cycle = 0
     memoryRequest = 0
@@ -20,11 +20,39 @@ def analysis(model:onnx.ModelProto,layout:str, node:onnx.NodeProto, memoryTable:
     
     for dim in dimX: staticMemX *= dim
     for dim in dimY: staticMemY *= dim
+    
+    # Get kernel_shape, stride, pad if available
+    kernel = [1, 1]
+    stride = [1, 1]
+    pads = [0, 0, 0, 0]
 
+    for attr in node.attribute:
+        if attr.name == "kernel_shape":
+            kernel = list(attr.ints)
+        elif attr.name == "strides":
+            stride = list(attr.ints)
+        elif attr.name == "pads":
+            pads = list(attr.ints)
+
+    kernel_h, kernel_w = kernel
+    stride_h, stride_w = stride
+    pad_top, pad_left, pad_bottom, pad_right = pads if len(pads) == 4 else (0, 0, 0, 0)
+
+    N, C, H_out, W_out = dimY  # Output shape
+
+    # ----------- MaxPool Operation Estimation -----------
+    # For each output element: kernel_h * kernel_w reads and compares
+    comparisons_per_output = kernel_h * kernel_w
+    total_outputs = N * C * H_out * W_out
+    cycle = total_outputs * comparisons_per_output  # Assume each comparison roughly 1 cycle
+
+    memory = staticMemX + staticMemY
+
+    # ----------- Memory Management -----------
     ######### memory Management #########
     request, memoryTable = tool.malloc(node.output[0], staticMemY // 8 , memoryTable)
     memoryRequest += request
-    _ = tool.dump_csv(csvPath=csvPath, memoryTable=memoryTable, memMAX=config.MEMORY_SIZE_IN_LAB16_3+1, second=cycle)
+    _ = tool.dump_csv(csvPath=csvPath, memoryTable=memoryTable, memMAX=config.MEMORY_SIZE, second=cycle + pervious_cycle)
     # for ipt in node.input:
     #     memoryTable = tool.free(ipt, memoryTable)
     memoryTable = tool.free(node.input[0], memoryTable)

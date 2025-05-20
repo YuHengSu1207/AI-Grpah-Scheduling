@@ -3,8 +3,6 @@ from .hit_policy import bestHit, firstHit
 
 
 def hit(memoryTable:list,memory:int,memory_MAX:int, hit_policy:str)->int:
-    
-
     hit_list = {
         "bestHit" : bestHit.hit, 
         "firstHit": firstHit.hit
