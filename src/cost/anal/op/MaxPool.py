@@ -62,4 +62,4 @@ def analysis(model:onnx.ModelProto,layout:str, node:onnx.NodeProto, memoryTable:
                 memoryTable = tool.free(input_name, memoryTable)
                 
     ######### memory Management #########
-    return memoryRequest, {"memory" : memory / 8192, "cycle":int(cycle)}, memoryTable
+    return memoryRequest, {"memory" : memory / 8192, "cycle":int(cycle)}, memoryTable, use_count

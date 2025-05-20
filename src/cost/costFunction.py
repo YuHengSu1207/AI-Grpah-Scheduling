@@ -70,7 +70,7 @@ def costFunction(model:onnx.ModelProto,layout:str,  memoryTable:Optional[list] =
         '''
         Do the analysis
         '''
-        _, table ,memoryTable = anal.analyticalModel(
+        _, table ,memoryTable, use_count= anal.analyticalModel(
             model=model,
             layout=layout,
             node=node,
@@ -83,7 +83,11 @@ def costFunction(model:onnx.ModelProto,layout:str,  memoryTable:Optional[list] =
         
         # print(f"memory table : {memoryTable} and cycle {cycle}")
         # print(f" ======== end of node {node.name} ========")
-        
+    
+    # Free the graph outputs
+    for output_name in model.graph.output:
+        memoryTable = tool.free(output_name.name, memoryTable)
+    
         # memoryRequest += request
     _ = tool.dump_csv(csvPath, memoryTable, config.MEMORY_SIZE, 0)
     return cycle

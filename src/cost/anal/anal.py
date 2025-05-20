@@ -1,5 +1,5 @@
 import onnx
-from .op import Conv, Relu, template, MaxPool, Add, Gemm, GlobalAveragepool, Flatten
+from .op import Conv, Relu, MaxPool, Add, Gemm, GlobalAveragepool, Flatten
 from typing import Optional, Union
 def analyticalModel(model:onnx.ModelProto,layout:str, node:onnx.NodeProto, memoryTable:list = None, csvPath:str = None, previous_cycle: int = 0, use_count: dict = None) -> tuple([int, dict,list]):
     operator = {
