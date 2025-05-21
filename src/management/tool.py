@@ -8,7 +8,7 @@ import os
 
 
 def malloc(tensorName:str, tensorSize:int, memoryTable:list)->tuple([int,list]):
-    pivot = policy.hit(memoryTable, tensorSize, MEMORY_SIZE + 1, hit_policy="bestHit") # 32MB + 1
+    pivot = policy.fit(memoryTable, tensorSize, MEMORY_SIZE + 1, fit_policy="newFit") # 32MB + 1
     if pivot == -1:
         print(f"Out of Memory : {tensorName} : {tensorSize/1024} KB")
         if memoryTable[-1]['valid'] == 1:

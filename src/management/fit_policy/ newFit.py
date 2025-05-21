@@ -1,5 +1,5 @@
-def hit(memoryTable:list,memory:int,memory_MAX:int)->int:
-    hit_index = -1
+def fit(memoryTable:list,memory:int,memory_MAX:int)->int:
+    fit_index = -1
     bestRecord = memory_MAX
     for cnt in range(len(memoryTable)):
         block = memoryTable[cnt]
@@ -7,6 +7,6 @@ def hit(memoryTable:list,memory:int,memory_MAX:int)->int:
             continue
         else:
             if block['size'] >= memory and block['size'] < bestRecord:
-                hit_index = cnt
+                fit_index = cnt
                 bestRecord = block['size']
-    return hit_index
+    return fit_index
