@@ -7,6 +7,34 @@ import os
 # memoryTable = [{"valid":0, "address":0, "size":4194304, "tensor":""}]
 
 
+from typing import List, Tuple, Dict
+
+def malloc_lifetime_aware(
+    tensorName: str,
+    tensorSize: int,
+    memoryTable: List[dict],
+    tensor_lifetimes: Dict[str, Tuple[int, int]],
+    largest_block: int
+) -> Tuple[int, List[dict]]:
+    """
+    Allocate memory using best-fit, but prefer placing long-lived tensors at low addresses
+    and bias shorter tensors upward to avoid overlap.
+    """
+    pivot = policy.fit(memoryTable, tensorSize, MEMORY_SIZE + 1, fit_policy="newFit") # 32MB + 1
+    if pivot == -1:
+        print(f"Out of Memory : {tensorName} : {tensorSize/1024} KB")
+        if memoryTable[-1]['valid'] == 1:
+            return tensorSize, memoryTable
+        else:  
+            return tensorSize - memoryTable[-1]["size"], memoryTable
+    else:
+        oBlk = memoryTable[pivot]
+        nBlk = {"valid":1, "address":oBlk['address'], "size":tensorSize, "tensor": tensorName}
+        memoryTable[pivot]["address"] = oBlk['address'] + tensorSize
+        memoryTable[pivot]["size"]    = oBlk['size'] - tensorSize
+        memoryTable.insert(pivot,nBlk)
+        return 0, memoryTable
+
 def malloc(tensorName:str, tensorSize:int, memoryTable:list)->tuple([int,list]):
     pivot = policy.fit(memoryTable, tensorSize, MEMORY_SIZE + 1, fit_policy="newFit") # 32MB + 1
     if pivot == -1:

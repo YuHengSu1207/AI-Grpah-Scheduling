@@ -6,6 +6,9 @@ from src.management import tool
 from src.structure import DATA_SIZE_DTYPE
 import os
 import src.config as config
+import math
+from collections import defaultdict
+
 def manager(model:onnx.ModelProto, operatorPath:str, csvPath:str) -> int:
     activative_tensor, static_tensor = create_tensor_dict(model)
     nodeList, nodeDict = create_operator_list_dict(model, static_tensor)
@@ -31,7 +34,79 @@ def manager(model:onnx.ModelProto, operatorPath:str, csvPath:str) -> int:
     second = 0 
     memMAX = tool.dump_csv(csvPath, memoryTable,memMAX, second)
     
-            
+    
+    last_use = {}   # tensorName -> last operator index
+    first_use = {}
+    for idx, op in enumerate(topo_order):
+        name = nodeList[op]
+        # all inputs get “last used” at idx
+        for t in nodeDict[name]['input']:
+            last_use[t] = idx
+            if(not first_use.get(t)): # not an output? or it's an graph.input
+                first_use.setdefault(t, idx)
+        # outputs are “born” here; if never read, last_use == idx
+        for t in nodeDict[name]['output']:
+            last_use.setdefault(t, idx)
+            first_use.setdefault(t, idx)
+                
+    tensor_lifetimes = {}  # tensor -> (start, end)
+    
+    for key in last_use:
+        start = first_use[key]
+        end = last_use[key]
+        tensor_lifetimes[key] = (start, end)
+        # print(f"tensor: {key} with lifetime begin: {start} and end: {end}")
+    
+    
+    # First, collect tensor sizes
+    tensor_sizes = {}
+    tensor_size_set = set()
+    for tensor_name in tensor_lifetimes:
+        tensor_sizes[tensor_name] = tool.operator_Mem_Bytes(activative_tensor[tensor_name])
+        tensor_size_set.add(tensor_sizes[tensor_name])
+    
+    # Determine the total range of time
+    max_time = max(end for _, end in tensor_lifetimes.values())
+
+    # Initialize time-based stats
+    time_liveness_stats = []  # List of (timestamp, num_live_tensors, total_bytes_live)
+    
+    # 1. Quantize all tensor sizes to 100KB buckets (rounded up)
+    QUANTIZE_UNIT = 100 * 1024  # 100 KB
+
+    quantized_tensor_sizes = {}
+    quantized_size_set = set()
+
+    for tensor_name, size in tensor_sizes.items():
+        # Round up to the nearest 100KB
+        bucket_size = int(math.ceil(size / QUANTIZE_UNIT) * QUANTIZE_UNIT)
+        quantized_tensor_sizes[tensor_name] = bucket_size
+        quantized_size_set.add(bucket_size)
+
+    quantized_size_set = sorted(quantized_size_set)
+
+    # 2. Count per-timestamp how many of each quantized size are alive
+    bucket_liveness_stats = []  # List of {timestamp -> {bucket_size: count}}
+
+    for t in range(max_time + 1):
+        bucket_count = defaultdict(int)
+        for name, (start, end) in tensor_lifetimes.items():
+            if start <= t <= end:
+                b = quantized_tensor_sizes[name]
+                bucket_count[b] += 1
+        bucket_liveness_stats.append((t, dict(bucket_count)))
+
+    # 3. Print the report
+    print("\n=== Bucketed Tensor Liveness Report (per 100KB) ===")
+    for t, bucket_count in bucket_liveness_stats:
+        print(f"Time {t:>2} :", end=" ")
+        for b in sorted(bucket_count.keys()):
+            print(f"{b//1024:>5}KB: {bucket_count[b]}", end="  ")
+        print()
+    
+    # starting address
+    largest_block = quantized_size_set[-1]
+
     for operator in topo_order:
         operatorName = nodeList[operator]
         inputList = nodeDict[operatorName]['input']
@@ -42,7 +117,13 @@ def manager(model:onnx.ModelProto, operatorPath:str, csvPath:str) -> int:
         second += 1
         for tensorName in outputList:
             memory = tool.operator_Mem_Bytes(activative_tensor[tensorName])
-            _, memoryTable = tool.malloc(tensorName, memory, memoryTable)
+            _, memoryTable = tool.malloc_lifetime_aware(
+                tensorName,
+                memory,
+                memoryTable,
+                tensor_lifetimes,
+                largest_block
+            )
         memMAX = tool.dump_csv(csvPath,memoryTable, memMAX, second)
         for tensorName in inputList:
             activative_tensor[tensorName]['consumer'].remove(operatorName)
