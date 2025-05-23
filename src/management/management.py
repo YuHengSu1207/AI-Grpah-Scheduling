@@ -76,7 +76,8 @@ def manager(model:onnx.ModelProto, operatorPath:str, csvPath:str) -> int:
 
     quantized_tensor_sizes = {}
     quantized_size_set = set()
-
+    large_block_list = set()
+    
     for tensor_name, size in tensor_sizes.items():
         # Round up to the nearest 100KB
         bucket_size = int(math.ceil(size / QUANTIZE_UNIT) * QUANTIZE_UNIT)
@@ -93,6 +94,10 @@ def manager(model:onnx.ModelProto, operatorPath:str, csvPath:str) -> int:
         for name, (start, end) in tensor_lifetimes.items():
             if start <= t <= end:
                 b = quantized_tensor_sizes[name]
+                if(b == quantized_size_set[-1]):
+                    # add the name for large block list
+                    large_block_list.add(name)
+                    
                 bucket_count[b] += 1
         bucket_liveness_stats.append((t, dict(bucket_count)))
 
@@ -105,7 +110,28 @@ def manager(model:onnx.ModelProto, operatorPath:str, csvPath:str) -> int:
         print()
     
     # starting address
-    largest_block = quantized_size_set[-1]
+    largest_block_size = quantized_size_set[-1]
+
+    '''
+    Large block estimation
+    '''
+    tensor_overlaps_large = {}  # tensor_name -> True/False
+
+    for t1, (start1, end1) in tensor_lifetimes.items():
+        overlaps = False
+        if(t1 in large_block_list):
+            tensor_overlaps_large[t1] = overlaps
+            continue
+        for large_tensor in large_block_list:
+            start2, end2 = tensor_lifetimes[large_tensor]
+            # Check if lifetimes overlap
+            # We only care about the lifetimes overlap when the it's will affect the placement for the large 
+            # tensor 
+            if (start1 < start2 and end2 > end1 and end1 > start2):
+                overlaps = True
+                break
+        tensor_overlaps_large[t1] = overlaps
+
 
     for operator in topo_order:
         operatorName = nodeList[operator]
@@ -117,13 +143,20 @@ def manager(model:onnx.ModelProto, operatorPath:str, csvPath:str) -> int:
         second += 1
         for tensorName in outputList:
             memory = tool.operator_Mem_Bytes(activative_tensor[tensorName])
-            _, memoryTable = tool.malloc_lifetime_aware(
+            _ , memoryTable = tool.malloc_lifetime_aware(
                 tensorName,
                 memory,
                 memoryTable,
-                tensor_lifetimes,
-                largest_block
+                largest_block_size,
+                tensor_overlaps_large
             )
+            '''_ , memoryTable = tool.malloc(
+                tensorName,
+                memory,
+                memoryTable
+            )'''
+            
+            tool.memory_table_check(memoryTable)
         memMAX = tool.dump_csv(csvPath,memoryTable, memMAX, second)
         for tensorName in inputList:
             activative_tensor[tensorName]['consumer'].remove(operatorName)
