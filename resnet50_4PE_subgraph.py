@@ -5,7 +5,7 @@ import json
 
 partition = 4
 
-model = onnx.load("out/resnet50-v7/resnet50_subgraph.onnx")
+model = onnx.load("out/resnet50-v14/resnet50_subgraph.onnx")
 nodeList, nodeDict = util.create_operator_list_dict(model,{})
 scheduling = scheduler(nodeDict, nodeList)
 
@@ -25,7 +25,7 @@ for pivot in range(partition):
     for i in scheduling:
         pe_node = []
         other_node = []
-        submodel = onnx.load(f"out/resnet50-v7/subgraph/resnet50_subgraph_Node_{nodeList[i]}.onnx")
+        submodel = onnx.load(f"out/resnet50-v14/subgraph/resnet50_subgraph_Node_{nodeList[i]}.onnx")
         for idx, node in enumerate(submodel.graph.node):
             if node.op_type not in PEList:
                 nodList.append(node)
@@ -50,9 +50,9 @@ for pivot in range(partition):
     # Create Model
     model_def = onnx.helper.make_model(graph_def, producer_name="acai-lab16")
     model_def.opset_import[0].version = 7
-    onnx.save(model_def,f'out/resnet50-v7/PE{pivot}.onnx')
+    onnx.save(model_def,f'out/resnet50-v14/PE{pivot}.onnx')
 
-    with open(f'out/resnet50-v7/PE{pivot}.json', 'w') as outfile:
+    with open(f'out/resnet50-v14/PE{pivot}.json', 'w') as outfile:
         json.dump(PEDict, outfile, indent=4)   
 
 
@@ -62,13 +62,13 @@ PE1 = {}
 PE2 = {}
 PE3 = {}
 
-with open(f'out/resnet50-v7/PE0.json', 'r') as outfile:
+with open(f'out/resnet50-v14/PE0.json', 'r') as outfile:
     PE0 = json.load(outfile)
-with open(f'out/resnet50-v7/PE1.json', 'r') as outfile:
+with open(f'out/resnet50-v14/PE1.json', 'r') as outfile:
     PE1 = json.load(outfile)
-with open(f'out/resnet50-v7/PE2.json', 'r') as outfile:
+with open(f'out/resnet50-v14/PE2.json', 'r') as outfile:
     PE2 = json.load(outfile)
-with open(f'out/resnet50-v7/PE3.json', 'r') as outfile:
+with open(f'out/resnet50-v14/PE3.json', 'r') as outfile:
     PE3 = json.load(outfile)
 
 

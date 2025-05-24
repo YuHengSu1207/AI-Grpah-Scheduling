@@ -313,7 +313,6 @@ modelname = os.path.basename(dirPath)
 model = onnx.load(args.modelpath)
 
 for idx in range(len(subgraphList)):
-    print(idx)
     first, final = subgraphList[idx]
     if isinstance(first, list) and isinstance(final, list):
         subModel = util.extract_subgraph_multi_node2node(model=model, topNodes=first, btmNodes=final)

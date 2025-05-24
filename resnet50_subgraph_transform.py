@@ -7,7 +7,7 @@ parser = argparse.ArgumentParser()
 
 
 
-model = onnx.load("out/resnet50-v7/resnet50_subgraph.onnx")
+model = onnx.load("out/resnet50-v14/resnet50_subgraph.onnx")
 nodeList, nodeDict = util.create_operator_list_dict(model,{})
 scheduling = scheduler(nodeDict, nodeList)
 
@@ -16,7 +16,7 @@ scheduling = scheduler(nodeDict, nodeList)
 
 for i in scheduling:
     n_idx, PEnode = util.get_node_Info(node_name=str(i), model=model)
-    submodel = onnx.load(f"out/resnet50-v7/subgraph/resnet50_subgraph_Node_{nodeList[i]}.onnx")
+    submodel = onnx.load(f"out/resnet50-v14/subgraph/resnet50_subgraph_Node_{nodeList[i]}.onnx")
     v_idx, _ = util.get_value_info(tensor_name=PEnode.input[-1], model=model)
     
     for idx, value_info in enumerate(submodel.graph.value_info):
@@ -28,4 +28,4 @@ for i in scheduling:
     for index in subnodeList:
         _, node = util.get_node_Info(index,submodel)
     model.graph.node.remove(PEnode)   
-onnx.save(model,f"out/resnet50-v7/resnet50_subgraph_transform.onnx")
+onnx.save(model,f"out/resnet50-v14/resnet50_subgraph_transform.onnx")
